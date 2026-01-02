@@ -37,6 +37,39 @@ void init_uart(void) {
     ESP_LOGI(TAG, "UART Driver initialized successfully");
 }
 
+void run_command(char *cmd)
+{
+    // If the same string they equal 0
+    if (strcmp(cmd, "help") == 0)
+    {
+        const char *msg = "\r\nAvailable Commands:\r\n  help - Show this list\r\n  ping - Test response\r\n  clear - Clear screen\r\n";
+        uart_write_bytes(UART_PORT_NUM, msg, strlen(msg));
+    }
+
+    // Simple ping command for testing
+    else if (strcmp(cmd, "ping") == 0)
+    {
+        const char *msg = "\r\npong!\r\n";
+        uart_write_bytes(UART_PORT_NUM, msg, strlen(msg));
+    }
+
+    else if (strcmp(cmd, "clear") == 0)
+    {
+        // Code for clearing terminal screen in ANSI
+        const char *msg = "\033[2J\033[H";
+        uart_write_bytes(UART_PORT_NUM, msg, strlen(msg));
+    }
+
+    else if (strlen(cmd) > 0)
+    {
+        char msg[64];
+        snprintf(msg, sizeof(msg), "\r\nUnknown command: %s\r\n", cmd);
+        uart_write_bytes(UART_PORT_NUM, msg, strlen(msg));
+    }
+
+    uart_write_bytes(UART_PORT_NUM, "\r\n> ", 4);
+}
+
 void app_main(void)
 {
     init_uart();
@@ -47,6 +80,8 @@ void app_main(void)
     // Stack allocation for our line buffer
     char line_buffer[128];
     int line_index = 0;
+
+    uart_write_bytes(UART_PORT_NUM, "\r\n> ", 4);
 
     const char *welcome_msg = "\r\n> CLI Ready. Type a command and press ENTER:\r\n";
     uart_write_bytes(UART_PORT_NUM, welcome_msg, strlen(welcome_msg));
@@ -64,12 +99,10 @@ void app_main(void)
                 // Check for ENTER key
                 if (c == '\r' || c == '\n') {
                     line_buffer[line_index] = '\0'; // Null-terminate the string
-
-                    // Capture logging inside the IF block
-                    if (line_index > 0) {
-                        ESP_LOGI(TAG, "CMD Processed: %s", line_buffer);
-                        uart_write_bytes(UART_PORT_NUM, "\r\n", 2);
-                    }
+                    
+                    // Internal Handling
+                    uart_write_bytes(UART_PORT_NUM, "\r\n", 2);
+                    run_command(line_buffer);
                     
                     // Reset Buffer
                     line_index = 0;
