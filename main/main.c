@@ -24,18 +24,14 @@ void init_uart(void) {
         .source_clk = UART_SCLK_DEFAULT,
     };
 
-    // 1. Configure the UART parameters
+    // Configure the UART parameters
     ESP_ERROR_CHECK(uart_param_config(UART_PORT_NUM, &uart_config));
 
-    // 2. Set the pins. 
-    // UART_PIN_NO_CHANGE tells it to keep using the default pins (GPIO 1/3)
-    // which connect to your USB cable.
+    // Set the pins. 
     ESP_ERROR_CHECK(uart_set_pin(UART_PORT_NUM, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE, 
                                  UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
 
     // 3. Install the driver
-    // We allocate a receive buffer (RX) but no transmit buffer (TX) because 
-    // writes block until sent anyway in this simple mode.
     ESP_ERROR_CHECK(uart_driver_install(UART_PORT_NUM, RX_BUF_SIZE * 2, 0, 0, NULL, 0));
     
     ESP_LOGI(TAG, "UART Driver initialized successfully");
@@ -45,12 +41,55 @@ void app_main(void)
 {
     init_uart();
 
-    // Send a raw welcome message using the driver (not printf!)
-    const char *welcome_msg = "\r\n> CLI Ready. Type something...\r\n";
+    // Heap allocation for the raw hardware buffer
+    uint8_t *data = (uint8_t *) malloc(RX_BUF_SIZE + 1);
+
+    // Stack allocation for our line buffer
+    char line_buffer[128];
+    int line_index = 0;
+
+    const char *welcome_msg = "\r\n> CLI Ready. Type a command and press ENTER:\r\n";
     uart_write_bytes(UART_PORT_NUM, welcome_msg, strlen(welcome_msg));
 
     while (1) {
-        // Just a placeholder loop for now
-        vTaskDelay(pdMS_TO_TICKS(1000));
+        // Read Raw Data from ESP32
+        // Note: capital TICK in portTICK_PERIOD_MS
+        int len = uart_read_bytes(UART_PORT_NUM, data, RX_BUF_SIZE, 20 / portTICK_PERIOD_MS);
+
+        if (len > 0) {
+            // Process each character
+            for (int i = 0; i < len; i++) {
+                char c = data[i];
+
+                // Check for ENTER key
+                if (c == '\r' || c == '\n') {
+                    line_buffer[line_index] = '\0'; // Null-terminate the string
+
+                    // Capture logging inside the IF block
+                    if (line_index > 0) {
+                        ESP_LOGI(TAG, "CMD Processed: %s", line_buffer);
+                        uart_write_bytes(UART_PORT_NUM, "\r\n", 2);
+                    }
+                    
+                    // Reset Buffer
+                    line_index = 0;
+                }
+                // Check for BACKSPACE
+                else if (c == 127 || c == 0x08) {
+                    if (line_index > 0) {
+                        line_index--;
+                        uart_write_bytes(UART_PORT_NUM, "\b \b", 3);
+                    }
+                }
+                // Normal Character
+                else {
+                    if (line_index < sizeof(line_buffer) - 1) {
+                        line_buffer[line_index++] = c;
+                        uart_write_bytes(UART_PORT_NUM, &c, 1);
+                    }
+                }
+            }
+        }
     }
+    free(data);
 }
