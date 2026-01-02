@@ -1,0 +1,11 @@
+# ESP-IDF specific
+build/
+sdkconfig
+sdkconfig.old
+managed_components/
+dependencies.lock
+
+# Editor specific
+.vscode/
+.idea/
+*.swp
