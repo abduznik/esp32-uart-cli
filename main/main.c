@@ -11,10 +11,12 @@
 #define UART_PORT_NUM      UART_NUM_0
 #define UART_BAUD_RATE     115200
 #define RX_BUF_SIZE        1024
+#define LED_PIN 2
 
 static const char *TAG = "CLI";
 
-void init_uart(void) {
+void init_uart(void) 
+{
     const uart_config_t uart_config = {
         .baud_rate = UART_BAUD_RATE,
         .data_bits = UART_DATA_8_BITS,
@@ -37,12 +39,26 @@ void init_uart(void) {
     ESP_LOGI(TAG, "UART Driver initialized successfully");
 }
 
+void init_led(void)
+{
+    // Reset PIN
+    gpio_reset_pin(LED_PIN);
+
+    // Set as OUTPUT
+    gpio_set_direction(LED_PIN, GPIO_MODE_OUTPUT);
+}
+
 void run_command(char *cmd)
 {
     // If the same string they equal 0
     if (strcmp(cmd, "help") == 0)
     {
-        const char *msg = "\r\nAvailable Commands:\r\n  help - Show this list\r\n  ping - Test response\r\n  clear - Clear screen\r\n";
+        const char *msg = "\r\nAvailable Commands:\r\n"  
+        "help - Show this list\r\n"  
+        "ping - Test response\r\n"  
+        "clear - Clear screen\r\n"
+        "led on - Turns LED on\r\n"  
+        "led off - Turns LED off\r\n";
         uart_write_bytes(UART_PORT_NUM, msg, strlen(msg));
     }
 
@@ -60,6 +76,27 @@ void run_command(char *cmd)
         uart_write_bytes(UART_PORT_NUM, msg, strlen(msg));
     }
 
+    else if (strncmp(cmd, "led ", 4) == 0)
+    {
+        char* arg = cmd + 4;
+
+        if (strcmp(arg, "on") == 0)
+        {
+            gpio_set_level(LED_PIN, 1);
+            uart_write_bytes(UART_PORT_NUM, "\r\nLED is ON\r\n", 13);
+        }
+
+        else if (strcmp(arg, "off") == 0)
+        {
+            gpio_set_level(LED_PIN, 0);
+            uart_write_bytes(UART_PORT_NUM, "\r\nLED is OFF\r\n", 14);
+        }
+        else
+        {
+            uart_write_bytes(UART_PORT_NUM, "\r\nLED is UNKNOWN\r\n", 18);
+        }
+    }
+
     else if (strlen(cmd) > 0)
     {
         char msg[64];
@@ -73,6 +110,7 @@ void run_command(char *cmd)
 void app_main(void)
 {
     init_uart();
+    init_led();
 
     // Heap allocation for the raw hardware buffer
     uint8_t *data = (uint8_t *) malloc(RX_BUF_SIZE + 1);
