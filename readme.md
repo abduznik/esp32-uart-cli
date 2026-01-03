@@ -38,7 +38,7 @@ It demonstrates how to handle raw byte streams, manage memory manually and contr
 ## Build And Flash
 1.  **Clone the repo:**
     ```bash
-    git clone [https://github.com/YOUR_USERNAME/esp32-uart-cli.git](https://github.com/abduznik/esp32-uart-cli.git)
+    git clone https://github.com/abduznik/esp32-uart-cli.git
     ```
 2.  **Build the project:**
     Click the **Build** icon in VS Code or run:
