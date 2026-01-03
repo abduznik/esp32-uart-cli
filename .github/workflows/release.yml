@@ -1,0 +1,50 @@
+name: Manual Release Builder
+
+# This allows you to click "Run workflow" manually
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release Version (e.g., v1.0)'
+        required: true
+        default: 'v1.0'
+      title:
+        description: 'Release Title'
+        required: false
+        default: 'New Firmware Release'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install ESP-IDF & Build
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.1.1
+          target: esp32
+          path: '.'
+          # We explicitly run merge-bin to get the single file
+          command: |
+            idf.py build
+            idf.py merge-bin
+
+      - name: Rename Artifact
+        run: |
+          # The merge-bin command usually outputs to build/merged-binary.bin
+          # We rename it to firmware.bin for your C tool compatibility
+          mv build/merged-binary.bin firmware.bin
+
+      - name: Create Release & Upload
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ inputs.version }}
+          name: ${{ inputs.title }}
+          files: firmware.bin
+          draft: false
+          prerelease: false
