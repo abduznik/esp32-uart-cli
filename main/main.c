@@ -58,7 +58,8 @@ void run_command(char *cmd)
         "ping - Test response\r\n"  
         "clear - Clear screen\r\n"
         "led on - Turns LED on\r\n"  
-        "led off - Turns LED off\r\n";
+        "led off - Turns LED off\r\n"
+        "gpio <pin> <0/1>\r\n";
         uart_write_bytes(UART_PORT_NUM, msg, strlen(msg));
     }
 
@@ -94,6 +95,45 @@ void run_command(char *cmd)
         else
         {
             uart_write_bytes(UART_PORT_NUM, "\r\nLED is UNKNOWN\r\n", 18);
+        }
+    }
+
+    // Format: "gpio <pin> <state>" (e.g., "gpio 4 1")
+    else if (strncmp(cmd, "gpio ", 5)== 0)
+    {
+        int pin, state;
+
+        if (sscanf(cmd + 5, "%d %d", &pin, &state) == 2)
+        {
+            if (pin == 1 || pin == 3)
+            {
+                const char* err = "\r\nError: Cannot override UART pins (1,3)!\r\n";
+                uart_write_bytes(UART_PORT_NUM, err, strlen(err));
+            }
+
+            else if (pin < 0 || pin > 39)
+            {
+                const char* err = "\r\nError: Invalid pin number!\r\n";
+                uart_write_bytes(UART_PORT_NUM, err, strlen(err));
+            }
+            else
+            {
+                // Configure the pin
+                gpio_reset_pin(pin);
+                gpio_set_direction(pin, GPIO_MODE_OUTPUT);
+
+                // Set Pin State
+                gpio_set_level(pin, state);
+
+                char msg[64];
+                snprintf(msg, sizeof(msg), "\r\nGPIO %d set to %d\r\n", pin, state);
+                uart_write_bytes(UART_PORT_NUM, msg, strlen(msg));
+            }
+        }
+        else
+        {
+            const char* usage = "\r\nUsage: gpio <pin> <0/1>\r\n";
+            uart_write_bytes(UART_PORT_NUM, usage, strlen(usage));
         }
     }
 
