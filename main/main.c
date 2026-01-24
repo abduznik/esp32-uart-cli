@@ -17,6 +17,7 @@ static const char *TAG = "CLI";
 
 void init_uart(void) 
 {
+    // 1. Configure the UART parameters
     const uart_config_t uart_config = {
         .baud_rate = UART_BAUD_RATE,
         .data_bits = UART_DATA_8_BITS,
@@ -26,14 +27,16 @@ void init_uart(void)
         .source_clk = UART_SCLK_DEFAULT,
     };
 
-    // Configure the UART parameters
+    // Apply the configuration to the UART port
     ESP_ERROR_CHECK(uart_param_config(UART_PORT_NUM, &uart_config));
 
-    // Set the pins. 
+    // 2. Set the UART pins
+    // We are using the default pins for UART0 (TX=1, RX=3), so we pass UART_PIN_NO_CHANGE.
     ESP_ERROR_CHECK(uart_set_pin(UART_PORT_NUM, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE, 
                                  UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
 
-    // 3. Install the driver
+    // 3. Install the UART driver
+    // We allocate a buffer for the RX (receive) queue, but no buffer for TX (transmit) because we write directly.
     ESP_ERROR_CHECK(uart_driver_install(UART_PORT_NUM, RX_BUF_SIZE * 2, 0, 0, NULL, 0));
     
     ESP_LOGI(TAG, "UART Driver initialized successfully");
@@ -41,10 +44,10 @@ void init_uart(void)
 
 void init_led(void)
 {
-    // Reset PIN
+    // Reset the GPIO pin to its default state
     gpio_reset_pin(LED_PIN);
 
-    // Set as OUTPUT
+    // Set the GPIO direction to OUTPUT so we can drive the LED
     gpio_set_direction(LED_PIN, GPIO_MODE_OUTPUT);
 }
 
@@ -166,36 +169,42 @@ void app_main(void)
 
     while (1) {
         // Read Raw Data from ESP32
+        // We wait for up to 20ms for data to arrive. If no data, it returns 0.
         // Note: capital TICK in portTICK_PERIOD_MS
         int len = uart_read_bytes(UART_PORT_NUM, data, RX_BUF_SIZE, 20 / portTICK_PERIOD_MS);
 
         if (len > 0) {
-            // Process each character
+            // Process each character received
             for (int i = 0; i < len; i++) {
                 char c = data[i];
 
-                // Check for ENTER key
+                // Check for ENTER key (Carriage Return or New Line)
                 if (c == '\r' || c == '\n') {
-                    line_buffer[line_index] = '\0'; // Null-terminate the string
+                    line_buffer[line_index] = '\0'; // Null-terminate the string to make it a valid C string
                     
-                    // Internal Handling
+                    // Echo a new line to the terminal
                     uart_write_bytes(UART_PORT_NUM, "\r\n", 2);
+                    
+                    // Execute the command
                     run_command(line_buffer);
                     
-                    // Reset Buffer
+                    // Reset Buffer for the next command
                     line_index = 0;
                 }
-                // Check for BACKSPACE
+                // Check for BACKSPACE (127 or 0x08)
                 else if (c == 127 || c == 0x08) {
                     if (line_index > 0) {
                         line_index--;
+                        // Remove the character from the terminal visual
                         uart_write_bytes(UART_PORT_NUM, "\b \b", 3);
                     }
                 }
                 // Normal Character
                 else {
+                    // Only add to buffer if there is space
                     if (line_index < sizeof(line_buffer) - 1) {
                         line_buffer[line_index++] = c;
+                        // Echo the character back to the terminal so the user sees what they type
                         uart_write_bytes(UART_PORT_NUM, &c, 1);
                     }
                 }
