@@ -9,3 +9,6 @@ dependencies.lock
 .vscode/
 .idea/
 *.swp
+
+# Compiled test runner binaries
+tests/runner
