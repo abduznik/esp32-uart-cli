@@ -23,7 +23,7 @@ It demonstrates how to handle raw byte streams, manage memory manually and contr
 * **Hardware Control:** Direct GPIO manipulation to toggle onboard LEDs.
 * **Crash Resistant:** Handles buffer overflows and invalid commands gracefully.
 
-## 🚀 Custom Command Extensibility (Add a New Command in 3 Steps)
+## Custom Command Extensibility (Add a New Command in 3 Steps)
 
 Our modular CLI framework makes it incredibly simple to extend. You can add your own custom command in exactly **3 steps** without ever touching the core parser logic:
 
@@ -99,10 +99,17 @@ Type `help` to see the menu.
 | `gpio set <pin> <0/1>` | Safely sets output level of general/strapping pins. |
 | `adc status` | Lists all 12-bit analog input levels and mV calculations. |
 | `adc read <pin>` | Performs on-demand analog read conversion. |
+| `i2c scan` | Scans dynamic I2C bus address grid for responsive devices. |
+| `i2c init <sda> <scl>` | Dynamic SDA/SCL pin routing with safety checks. |
+| `i2c read <addr> <reg>` | Performs register read transaction on I2C device. |
+| `i2c write <addr> <reg> <val>` | Performs register write transaction on I2C device. |
+| `version` | Displays active firmware version release tag. |
+| `restart` | Triggers a hardware-level software soft reset. |
+| `uptime` | Shows elapsed system uptime in seconds. |
 
 ---
 
-## 📚 Documentation & Architecture
+## Documentation & Architecture
 
 For in-depth guides on the new safety protections and modular software structure, explore:
 * **[Modular Software Architecture](docs/architecture.md)** — Breakdown of decoupled hardware drivers, wrapper libraries, and code de-duplication results.
