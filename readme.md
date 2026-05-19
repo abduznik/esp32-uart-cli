@@ -23,6 +23,38 @@ It demonstrates how to handle raw byte streams, manage memory manually and contr
 * **Hardware Control:** Direct GPIO manipulation to toggle onboard LEDs.
 * **Crash Resistant:** Handles buffer overflows and invalid commands gracefully.
 
+## 🚀 Custom Command Extensibility (Add a New Command in 3 Steps)
+
+Our modular CLI framework makes it incredibly simple to extend. You can add your own custom command in exactly **3 steps** without ever touching the core parser logic:
+
+### Step 1: Implement your Handler Function
+In `main/commands.c`, write your handler function using standard C command arguments:
+```c
+static void handle_hello(int argc, char **argv) {
+    if (argc < 2) {
+        console_print("\r\nHello, World!\r\n");
+        return;
+    }
+    console_printf("\r\nHello, %s!\r\n", argv[1]);
+}
+```
+
+### Step 2: Register it in the Commands Table
+Add your new command to the `commands[]` registry array in `main/commands.c`:
+```c
+const Command commands[] = {
+    // ... existing commands
+    {"hello", "Print a personalized greeting [hello <name>]", handle_hello}
+};
+```
+
+### Step 3: Compile and run!
+Rebuild your project:
+```bash
+idf.py build
+```
+Type `help` in the terminal: your new `hello` command will **automatically** appear in the listing and map its handler!
+
 ## Hardware Setup
 * **Controller:** ESP32 Development Board.
 * **Connection:** Micro-USB Or Type C data cable connected to the UART0 port.
