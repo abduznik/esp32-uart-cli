@@ -4,7 +4,7 @@
 #include "console.h"
 
 int read_adc_pin(int pin, int *out_raw) {
-    adc_oneshot_chan_t channel;
+    adc_channel_t channel;
     switch (pin) {
         case 36: channel = ADC_CHANNEL_0; break;
         case 39: channel = ADC_CHANNEL_3; break;
