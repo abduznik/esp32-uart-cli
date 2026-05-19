@@ -62,3 +62,17 @@ Type `help` to see the menu.
 | `led on` | Turns the onboard Blue LED ON. |
 | `led off` | Turns the onboard Blue LED OFF. |
 | `clear` | Clears the terminal screen. |
+| `gpio status` | Lists all safety ratings, levels, and colors. |
+| `gpio read <pin>` | Safely reads logical level of any exposed pin. |
+| `gpio set <pin> <0/1>` | Safely sets output level of general/strapping pins. |
+| `adc status` | Lists all 12-bit analog input levels and mV calculations. |
+| `adc read <pin>` | Performs on-demand analog read conversion. |
+
+---
+
+## 📚 Documentation & Architecture
+
+For in-depth guides on the new safety protections and modular software structure, explore:
+* **[Modular Software Architecture](docs/architecture.md)** — Breakdown of decoupled hardware drivers, wrapper libraries, and code de-duplication results.
+* **[Hardware Safety & Control Manual](docs/gpio_safety_implementation.md)** — Comprehensive breakdown of ESP32 strapping pins, blocked critical registers (SPI Flash/Console UART), ADC attenuation math, and host-side testing instructions.
+* **[Safety-Aware Dynamic I2C Controller](docs/i2c_implementation.md)** — Dynamic I2C scanner address matrix grids, dynamic SDA/SCL remapping validations, and raw register read/writes.

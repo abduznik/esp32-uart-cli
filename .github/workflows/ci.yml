@@ -1,0 +1,22 @@
+name: Continuous Integration
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Run Host-Side Test Suite
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+
+      - name: Compile and Verify Tests
+        run: |
+          make test

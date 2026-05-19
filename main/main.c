@@ -1,153 +1,284 @@
 #include <stdio.h>
 #include <string.h>
+#include <stdbool.h>
+#include <stdlib.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "driver/uart.h"
 #include "driver/gpio.h"
 #include "esp_log.h"
+#include "esp_system.h"
+#include "esp_timer.h"
 
-// --- Configuration Constants ---
-// We use UART0 because that is connected to your USB cable
-#define UART_PORT_NUM      UART_NUM_0
-#define UART_BAUD_RATE     115200
+// Component Headers
+#include "console.h"
+#include "led.h"
+#include "gpio_control.h"
+#include "adc_control.h"
+#include "i2c_control.h"
+
 #define RX_BUF_SIZE        1024
-#define LED_PIN 2
-
-static const char *TAG = "CLI";
-
-void init_uart(void) 
-{
-    // 1. Configure the UART parameters
-    const uart_config_t uart_config = {
-        .baud_rate = UART_BAUD_RATE,
-        .data_bits = UART_DATA_8_BITS,
-        .parity    = UART_PARITY_DISABLE,
-        .stop_bits = UART_STOP_BITS_1,
-        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
-        .source_clk = UART_SCLK_DEFAULT,
-    };
-
-    // Apply the configuration to the UART port
-    ESP_ERROR_CHECK(uart_param_config(UART_PORT_NUM, &uart_config));
-
-    // 2. Set the UART pins
-    // We are using the default pins for UART0 (TX=1, RX=3), so we pass UART_PIN_NO_CHANGE.
-    ESP_ERROR_CHECK(uart_set_pin(UART_PORT_NUM, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE, 
-                                 UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
-
-    // 3. Install the UART driver
-    // We allocate a buffer for the RX (receive) queue, but no buffer for TX (transmit) because we write directly.
-    ESP_ERROR_CHECK(uart_driver_install(UART_PORT_NUM, RX_BUF_SIZE * 2, 0, 0, NULL, 0));
-    
-    ESP_LOGI(TAG, "UART Driver initialized successfully");
-}
-
-void init_led(void)
-{
-    // Reset the GPIO pin to its default state
-    gpio_reset_pin(LED_PIN);
-
-    // Set the GPIO direction to OUTPUT so we can drive the LED
-    gpio_set_direction(LED_PIN, GPIO_MODE_OUTPUT);
-}
 
 void run_command(char *cmd)
 {
-    // If the same string they equal 0
     if (strcmp(cmd, "help") == 0)
     {
-        const char *msg = "\r\nAvailable Commands:\r\n"  
-        "help - Show this list\r\n"  
-        "ping - Test response\r\n"  
-        "clear - Clear screen\r\n"
-        "led on - Turns LED on\r\n"  
-        "led off - Turns LED off\r\n"
-        "gpio <pin> <0/1>\r\n";
-        uart_write_bytes(UART_PORT_NUM, msg, strlen(msg));
+        console_print("\r\nAvailable Commands:\r\n"  
+                      "help - Show this list\r\n"  
+                      "ping - Test response\r\n"  
+                      "clear - Clear screen\r\n"
+                      "led on - Turns LED on\r\n"  
+                      "led off - Turns LED off\r\n"
+                      "gpio status - List all GPIO pins, safety levels & values\r\n"
+                      "gpio read <pin> - Read digital state of a pin\r\n"
+                      "gpio <pin> <0/1> - Set a pin level (Output)\r\n"
+                      "gpio set <pin> <0/1> - Set a pin level (Output)\r\n"
+                      "adc status - List all ADC pins, channels & raw/voltage levels\r\n"
+                      "adc read <pin> - Read analog value and voltage on a pin\r\n"
+                      "adc <pin> - Read analog value and voltage on a pin\r\n"
+                      "i2c scan - Scan current I2C bus for devices\r\n"
+                      "i2c init <sda> <scl> - Configure active SCL/SDA pins dynamically\r\n"
+                      "i2c read <addr> <reg> - Read a 1-byte register value\r\n"
+                      "i2c write <addr> <reg> <val> - Write a 1-byte register value\r\n"
+                      "version - Show the firmware version\r\n"
+                      "restart - Trigger a software reset\r\n"
+                      "uptime - Show the system uptime duration\r\n");
     }
-
-    // Simple ping command for testing
     else if (strcmp(cmd, "ping") == 0)
     {
-        const char *msg = "\r\npong!\r\n";
-        uart_write_bytes(UART_PORT_NUM, msg, strlen(msg));
+        console_print("\r\npong!\r\n");
     }
-
     else if (strcmp(cmd, "clear") == 0)
     {
-        // Code for clearing terminal screen in ANSI
-        const char *msg = "\033[2J\033[H";
-        uart_write_bytes(UART_PORT_NUM, msg, strlen(msg));
+        console_print("\033[2J\033[H");
     }
-
     else if (strncmp(cmd, "led ", 4) == 0)
     {
         char* arg = cmd + 4;
-
         if (strcmp(arg, "on") == 0)
         {
-            gpio_set_level(LED_PIN, 1);
-            uart_write_bytes(UART_PORT_NUM, "\r\nLED is ON\r\n", 13);
+            led_on();
+            console_print("\r\nLED is ON\r\n");
         }
-
         else if (strcmp(arg, "off") == 0)
         {
-            gpio_set_level(LED_PIN, 0);
-            uart_write_bytes(UART_PORT_NUM, "\r\nLED is OFF\r\n", 14);
+            led_off();
+            console_print("\r\nLED is OFF\r\n");
         }
         else
         {
-            uart_write_bytes(UART_PORT_NUM, "\r\nLED is UNKNOWN\r\n", 18);
+            console_print("\r\nLED is UNKNOWN\r\n");
         }
     }
-
-    // Format: "gpio <pin> <state>" (e.g., "gpio 4 1")
-    else if (strncmp(cmd, "gpio ", 5)== 0)
+    else if (strncmp(cmd, "gpio ", 5) == 0)
     {
-        int pin, state;
-
-        if (sscanf(cmd + 5, "%d %d", &pin, &state) == 2)
+        char *sub = cmd + 5;
+        if (strcmp(sub, "status") == 0 || strcmp(sub, "list") == 0)
         {
-            if (pin == 1 || pin == 3)
+            print_gpio_status();
+        }
+        else if (strncmp(sub, "read ", 5) == 0)
+        {
+            int pin;
+            if (sscanf(sub + 5, "%d", &pin) == 1)
             {
-                const char* err = "\r\nError: Cannot override UART pins (1,3)!\r\n";
-                uart_write_bytes(UART_PORT_NUM, err, strlen(err));
-            }
-
-            else if (pin < 0 || pin > 39)
-            {
-                const char* err = "\r\nError: Invalid pin number!\r\n";
-                uart_write_bytes(UART_PORT_NUM, err, strlen(err));
+                int val;
+                int res = read_gpio_level_safe(pin, &val);
+                if (res == -1) {
+                    console_print("\r\n\033[0;31mError: Invalid pin number or not exposed on standard ESP32!\033[0m\r\n");
+                } else if (res == -2) {
+                    console_print("\r\n\033[0;31mError: Pin is reserved for SPI Flash! Reading it directly is prohibited to avoid CPU crash.\033[0m\r\n");
+                } else {
+                    console_printf("\r\nGPIO %d state: \033[1;36m%d\033[0m (%s)\r\n", pin, val, get_pin_safety_str(get_pin_safety(pin)));
+                }
             }
             else
             {
-                // Configure the pin
-                gpio_reset_pin(pin);
-                gpio_set_direction(pin, GPIO_MODE_OUTPUT);
-
-                // Set Pin State
-                gpio_set_level(pin, state);
-
-                char msg[64];
-                snprintf(msg, sizeof(msg), "\r\nGPIO %d set to %d\r\n", pin, state);
-                uart_write_bytes(UART_PORT_NUM, msg, strlen(msg));
+                console_print("\r\nUsage: gpio read <pin>\r\n");
             }
         }
         else
         {
-            const char* usage = "\r\nUsage: gpio <pin> <0/1>\r\n";
-            uart_write_bytes(UART_PORT_NUM, usage, strlen(usage));
+            int pin, state;
+            bool valid_parse = false;
+            if (strncmp(sub, "set ", 4) == 0) {
+                if (sscanf(sub + 4, "%d %d", &pin, &state) == 2) valid_parse = true;
+            } else {
+                if (sscanf(sub, "%d %d", &pin, &state) == 2) valid_parse = true;
+            }
+            
+            if (valid_parse)
+            {
+                if (state != 0 && state != 1)
+                {
+                    console_print("\r\n\033[0;31mError: State must be 0 or 1!\033[0m\r\n");
+                }
+                else
+                {
+                    char out_msg[256];
+                    write_gpio_level_safe(pin, state, out_msg, sizeof(out_msg));
+                    console_print(out_msg);
+                }
+            }
+            else
+            {
+                console_print("\r\nUsage:\r\n"
+                              "  gpio status            - Show status table of all pins\r\n"
+                              "  gpio read <pin>        - Read current level of a pin\r\n"
+                              "  gpio <pin> <0/1>       - Set output level of a pin\r\n"
+                              "  gpio set <pin> <0/1>   - Set output level of a pin\r\n");
+            }
         }
     }
-
+    else if (strncmp(cmd, "adc ", 4) == 0 || strcmp(cmd, "adc") == 0)
+    {
+        char *sub = cmd + 4;
+        if (strcmp(cmd, "adc") == 0 || strcmp(sub, "status") == 0 || strcmp(sub, "list") == 0)
+        {
+            print_adc_status();
+        }
+        else if (strncmp(sub, "read ", 5) == 0)
+        {
+            int pin;
+            if (sscanf(sub + 5, "%d", &pin) == 1)
+            {
+                int raw_val = 0;
+                int res = read_adc_pin(pin, &raw_val);
+                if (res == 0)
+                {
+                    int mv = (raw_val * 3100) / 4095;
+                    console_printf("\r\nGPIO %d (ADC1 Channel): Raw = \033[1;35m%d\033[0m | Voltage = \033[1;32m%d mV (~%.2f V)\033[0m\r\n", pin, raw_val, mv, mv / 1000.0);
+                }
+                else
+                {
+                    console_print("\r\n\033[0;31mError: GPIO is not a valid ADC1 pin! Supported: 32, 33, 34, 35, 36, 39.\033[0m\r\n");
+                }
+            }
+            else
+            {
+                console_print("\r\nUsage: adc read <pin>\r\n");
+            }
+        }
+        else
+        {
+            int pin;
+            if (sscanf(sub, "%d", &pin) == 1)
+            {
+                int raw_val = 0;
+                int res = read_adc_pin(pin, &raw_val);
+                if (res == 0)
+                {
+                    int mv = (raw_val * 3100) / 4095;
+                    console_printf("\r\nGPIO %d (ADC1 Channel): Raw = \033[1;35m%d\033[0m | Voltage = \033[1;32m%d mV (~%.2f V)\033[0m\r\n", pin, raw_val, mv, mv / 1000.0);
+                }
+                else
+                {
+                    console_print("\r\n\033[0;31mError: GPIO is not a valid ADC1 pin! Supported: 32, 33, 34, 35, 36, 39.\033[0m\r\n");
+                }
+            }
+            else
+            {
+                console_print("\r\nUsage:\r\n"
+                              "  adc status         - Show status table of all analog pins\r\n"
+                              "  adc read <pin>     - Read analog level of a pin\r\n"
+                              "  adc <pin>          - Read analog level of a pin\r\n");
+            }
+        }
+    }
+    else if (strncmp(cmd, "i2c ", 4) == 0 || strcmp(cmd, "i2c") == 0)
+    {
+        char *sub = cmd + 4;
+        if (strcmp(cmd, "i2c") == 0 || strcmp(sub, "scan") == 0)
+        {
+            i2c_scan();
+        }
+        else if (strncmp(sub, "init ", 5) == 0)
+        {
+            int sda, scl;
+            if (sscanf(sub + 5, "%d %d", &sda, &scl) == 2)
+            {
+                int res = init_i2c_pins(sda, scl);
+                if (res == 0)
+                {
+                    console_printf("\r\n\033[0;32mI2C Bus reconfigured successfully (SDA: GPIO %d, SCL: GPIO %d)!\033[0m\r\n", sda, scl);
+                }
+            }
+            else
+            {
+                console_print("\r\nUsage: i2c init <sda_pin> <scl_pin>\r\n");
+            }
+        }
+        else if (strncmp(sub, "read ", 5) == 0)
+        {
+            unsigned int addr, reg;
+            if (sscanf(sub + 5, "%x %x", &addr, &reg) == 2)
+            {
+                uint8_t val = 0;
+                int res = i2c_read_reg(addr, reg, &val, 1);
+                if (res == 0)
+                {
+                    console_printf("\r\nI2C Read [Addr: 0x%02x, Reg: 0x%02x] -> \033[1;32m0x%02x\033[0m\r\n", addr, reg, val);
+                }
+                else
+                {
+                    console_print("\r\n\033[0;31mError: No response from I2C device!\033[0m\r\n");
+                }
+            }
+            else
+            {
+                console_print("\r\nUsage: i2c read <hex_addr> <hex_reg>\r\n");
+            }
+        }
+        else if (strncmp(sub, "write ", 6) == 0)
+        {
+            unsigned int addr, reg, val;
+            if (sscanf(sub + 6, "%x %x %x", &addr, &reg, &val) == 3)
+            {
+                int res = i2c_write_reg(addr, reg, val);
+                if (res == 0)
+                {
+                    console_printf("\r\n\033[0;32mI2C Write Success [Addr: 0x%02x, Reg: 0x%02x] <- 0x%02x\033[0m\r\n", addr, reg, val);
+                }
+                else
+                {
+                    console_print("\r\n\033[0;31mError: Failed writing to I2C device!\033[0m\r\n");
+                }
+            }
+            else
+            {
+                console_print("\r\nUsage: i2c write <hex_addr> <hex_reg> <hex_val>\r\n");
+            }
+        }
+        else
+        {
+            console_print("\r\nUsage:\r\n"
+                          "  i2c scan                      - Scan dynamic bus address grid\r\n"
+                          "  i2c init <sda> <scl>          - Configure active bus pins\r\n"
+                          "  i2c read <addr> <reg>         - Read hex byte from address & register\r\n"
+                          "  i2c write <addr> <reg> <val>  - Write hex byte to address & register\r\n");
+        }
+    }
+    else if (strcmp(cmd, "version") == 0)
+    {
+        console_printf("\r\nFirmware Version: v1.0.2\r\n");
+    }
+    else if (strcmp(cmd, "restart") == 0)
+    {
+        console_print("\r\nRestarting ESP32...\r\n");
+        esp_restart();
+    }
+    else if (strcmp(cmd, "uptime") == 0)
+    {
+        int64_t us = esp_timer_get_time();
+        int seconds = (int)(us / 1000000);
+        console_printf("\r\nSystem uptime: %d seconds\r\n", seconds);
+    }
     else if (strlen(cmd) > 0)
     {
-        char msg[64];
-        snprintf(msg, sizeof(msg), "\r\nUnknown command: %s\r\n", cmd);
-        uart_write_bytes(UART_PORT_NUM, msg, strlen(msg));
+        console_printf("\r\nUnknown command: %s\r\n", cmd);
     }
 
-    uart_write_bytes(UART_PORT_NUM, "\r\n> ", 4);
+    console_print("\r\n> ");
 }
 
 void app_main(void)
@@ -155,57 +286,33 @@ void app_main(void)
     init_uart();
     init_led();
 
-    // Heap allocation for the raw hardware buffer
     uint8_t *data = (uint8_t *) malloc(RX_BUF_SIZE + 1);
-
-    // Stack allocation for our line buffer
     char line_buffer[128];
     int line_index = 0;
 
-    uart_write_bytes(UART_PORT_NUM, "\r\n> ", 4);
-
-    const char *welcome_msg = "\r\n> CLI Ready. Type a command and press ENTER:\r\n";
-    uart_write_bytes(UART_PORT_NUM, welcome_msg, strlen(welcome_msg));
+    console_print("\r\n> \r\n> CLI Ready. Type a command and press ENTER:\r\n");
 
     while (1) {
-        // Read Raw Data from ESP32
-        // We wait for up to 20ms for data to arrive. If no data, it returns 0.
-        // Note: capital TICK in portTICK_PERIOD_MS
         int len = uart_read_bytes(UART_PORT_NUM, data, RX_BUF_SIZE, 20 / portTICK_PERIOD_MS);
-
         if (len > 0) {
-            // Process each character received
             for (int i = 0; i < len; i++) {
                 char c = data[i];
-
-                // Check for ENTER key (Carriage Return or New Line)
                 if (c == '\r' || c == '\n') {
-                    line_buffer[line_index] = '\0'; // Null-terminate the string to make it a valid C string
-                    
-                    // Echo a new line to the terminal
-                    uart_write_bytes(UART_PORT_NUM, "\r\n", 2);
-                    
-                    // Execute the command
+                    line_buffer[line_index] = '\0';
+                    console_print("\r\n");
                     run_command(line_buffer);
-                    
-                    // Reset Buffer for the next command
                     line_index = 0;
                 }
-                // Check for BACKSPACE (127 or 0x08)
                 else if (c == 127 || c == 0x08) {
                     if (line_index > 0) {
                         line_index--;
-                        // Remove the character from the terminal visual
-                        uart_write_bytes(UART_PORT_NUM, "\b \b", 3);
+                        console_print("\b \b");
                     }
                 }
-                // Normal Character
                 else {
-                    // Only add to buffer if there is space
                     if (line_index < sizeof(line_buffer) - 1) {
                         line_buffer[line_index++] = c;
-                        // Echo the character back to the terminal so the user sees what they type
-                        uart_write_bytes(UART_PORT_NUM, &c, 1);
+                        console_printf("%c", c);
                     }
                 }
             }
