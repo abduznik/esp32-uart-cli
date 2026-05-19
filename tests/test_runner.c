@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include "../main/config.h"
 #include "driver/gpio.h"
 #include "driver/uart.h"
 #include "esp_adc/adc_oneshot.h"
@@ -411,7 +412,9 @@ void test_system_commands(void) {
     // Test version command
     clear_uart_buf();
     run_command("version");
-    ASSERT_SUBSTR(uart0_output_buf, "Firmware Version: v1.0.2", "Version command prints correct firmware tag");
+    char expected_ver[64];
+    snprintf(expected_ver, sizeof(expected_ver), "Firmware Version: %s", CLI_FIRMWARE_VERSION);
+    ASSERT_SUBSTR(uart0_output_buf, expected_ver, "Version command prints correct firmware tag");
 
     // Test uptime command
     clear_uart_buf();

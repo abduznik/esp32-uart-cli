@@ -1,4 +1,5 @@
 #include "commands.h"
+#include "config.h"
 #include "console.h"
 #include "led.h"
 #include "gpio_control.h"
@@ -250,7 +251,7 @@ static void handle_i2c(int argc, char **argv) {
 }
 
 static void handle_version(int argc, char **argv) {
-    console_printf("\r\nFirmware Version: v1.0.2\r\n");
+    console_printf("\r\nFirmware Version: %s\r\n", CLI_FIRMWARE_VERSION);
 }
 
 static void handle_restart(int argc, char **argv) {
